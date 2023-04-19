@@ -1,4 +1,4 @@
-from efficientnet_pytorch import EfficientNet
+import timm
 from glob import glob
 from sklearn.model_selection import GroupKFold
 import cv2
@@ -18,6 +18,7 @@ from albumentations.pytorch.transforms import ToTensorV2
 from torch.utils.data import Dataset,DataLoader
 from torch.utils.data.sampler import SequentialSampler, RandomSampler
 import sklearn
+
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
@@ -36,34 +37,45 @@ def seed_everything(seed):
     torch.backends.cudnn.benchmark = True
 seed_everything(SEED)
 
-class ZeroLinear(nn.Module):
-    def __init__(self,in_dim,out_dim):
-        super(ZeroLinear, self).__init__()
-        self.linear = nn.Linear(in_dim,out_dim-1)
+# Efficient Net
+class EfficientNet(nn.Module):
+    def __init__(self, backbone = 'efficientnet_b0', out_dim = None):
+        super().__init__()
+        self.conv1 = nn.Convs2d(3, 6, 3, stride=1, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(6, 12, 3, stride=1, padding=1, bias=False)
+        self.conv3 = nn.Conv2d(12, 36, 3, stride=1, padding=1, bias=False)
+        self.mybn1 = nn.BatchNorm2d(6)
+        self.mybn2 = nn.BatchNorm2d(12)
+        self.mybn3 = nn.BatchNorm2d(36)
+
+        self.enet = timm.create_model('efficientnet_b0', pretrained=True)
+        self.enet.conv_stem.weight = nn.Parameter(self.enet.conv_stem.weight.repeat(1, 12, 1, 1))
+
+        self.dropout = nn.Dropout(0.5)
+        self.enet.blocks[5] = nn.Identity()
+        self.enet.blocks[6] = nn.Sequential(
+            nn.Conv2d(self.enet.blocks[4][2].conv_pwl.out_channels, self.enet.conv_head.in_channels, 1),
+            nn.BatchNorm2d(self.enet.conv_head.in_channels),
+            nn.ReLU6(),
+        )
+        self.myfc = nn.Linear(self.enet.classifier.in_features, out_dim)
+        self.enet.classifier = nn.Identity()
+
+    def extract(self, x):
+        x = F.relu6(self.mybn1(self.conv1(x)))
+        x = F.relu6(self.mybn2(self.conv2(x)))
+        x = F.relu6(self.mybn3(self.conv3(x)))
+        x = self.enet(x)
+        return x
 
     def forward(self, x):
-        batch_size = len(x)
-        x = self.linear(x)
-        zero = torch.zeros((batch_size, 1), dtype=x.dtype).to(x.device)
-        x = torch.cat([zero, x], -1)
+        x = self.extract(x)
+        x = self.myfc(self.dropout(x))
         return x
 
 # EfficientNet
-class get_net(nn.Module):
-    def load_pretrain(self, skip=['logit.', 'stem.', 'block6.', 'block7.', 'last.'], is_print=True):
-        load_pretrain(self, skip, pretrain_file=PRETRAIN_FILE, conversion=CONVERSION, is_print=is_print)
-    def __init__(self):
-        super(get_net, self).__init__()
-        net = EfficientNet.from_pretrained('efficientnet-b4')
-        self.block1 = net.block1
-        self.block2 = net.block2
-        self.block3 = net.block3
-        self.block4 = net.block4
-        self.block5 = net.block5
-        del net
-        #net._fc = nn.Linear(in_features = 1792, out_features = 4, bias = True)
 
-net = get_net().cuda()
+net = EfficientNet().cuda()
 
 checkpoint = torch.load('checkpoints/best-checkpoint-042epoch_3_c.bin')
 net.load_state_dict(checkpoint['model_state_dict']);
