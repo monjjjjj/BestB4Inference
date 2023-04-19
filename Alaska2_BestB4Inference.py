@@ -1,4 +1,4 @@
-import timm
+from efficientnet_pytorch import EfficientNet
 from glob import glob
 from sklearn.model_selection import GroupKFold
 import cv2
@@ -26,6 +26,7 @@ DATA_ROOT_PATH = '/home/chloe/Siting/ALASKA2'
 SEED = 42
 results = []
 submissions = []
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 def seed_everything(seed):
     random.seed(seed)
@@ -37,45 +38,14 @@ def seed_everything(seed):
     torch.backends.cudnn.benchmark = True
 seed_everything(SEED)
 
-# Efficient Net
-class EfficientNet(nn.Module):
-    def __init__(self, backbone = 'efficientnet_b0', out_dim = None):
-        super().__init__()
-        self.conv1 = nn.Convs2d(3, 6, 3, stride=1, padding=1, bias=False)
-        self.conv2 = nn.Conv2d(6, 12, 3, stride=1, padding=1, bias=False)
-        self.conv3 = nn.Conv2d(12, 36, 3, stride=1, padding=1, bias=False)
-        self.mybn1 = nn.BatchNorm2d(6)
-        self.mybn2 = nn.BatchNorm2d(12)
-        self.mybn3 = nn.BatchNorm2d(36)
-
-        self.enet = timm.create_model('efficientnet_b0', pretrained=True)
-        self.enet.conv_stem.weight = nn.Parameter(self.enet.conv_stem.weight.repeat(1, 12, 1, 1))
-
-        self.dropout = nn.Dropout(0.5)
-        self.enet.blocks[5] = nn.Identity()
-        self.enet.blocks[6] = nn.Sequential(
-            nn.Conv2d(self.enet.blocks[4][2].conv_pwl.out_channels, self.enet.conv_head.in_channels, 1),
-            nn.BatchNorm2d(self.enet.conv_head.in_channels),
-            nn.ReLU6(),
-        )
-        self.myfc = nn.Linear(self.enet.classifier.in_features, out_dim)
-        self.enet.classifier = nn.Identity()
-
-    def extract(self, x):
-        x = F.relu6(self.mybn1(self.conv1(x)))
-        x = F.relu6(self.mybn2(self.conv2(x)))
-        x = F.relu6(self.mybn3(self.conv3(x)))
-        x = self.enet(x)
-        return x
-
-    def forward(self, x):
-        x = self.extract(x)
-        x = self.myfc(self.dropout(x))
-        return x
-
 # EfficientNet
+def build_model():
+    model = EfficientNet.from_pretrained('efficientnet-b4')
+    model._fc = nn.Linear(in_features = 1792, out_features = 4, bias = True)
+    model = model.to(device)
+    return model
 
-net = EfficientNet().cuda()
+net = build_model()
 
 checkpoint = torch.load('checkpoints/best-checkpoint-042epoch_3_c.bin')
 net.load_state_dict(checkpoint['model_state_dict']);
@@ -85,7 +55,8 @@ def get_test_transforms(mode):
     if mode == 0:
         return A.Compose([
                 A.Resize(height = 512, width = 512, p = 1.0),
-                ToTensorV2(p = 1.0)], p = 1.0)
+                ToTensorV2(p = 1.0),
+            ], p = 1.0)
     elif mode == 1:
         return A.Compose([
                 A.HorizontalFlip(p = 1),
