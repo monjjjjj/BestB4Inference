@@ -37,20 +37,10 @@ def seed_everything(seed):
 seed_everything(SEED)
 
 # EfficientNet
-class get_net(nn.Module):
-    def load_pretrain(self, skip=['logit.', 'stem.', 'block6.', 'block7.', 'last.'], is_print=True):
-        load_pretrain(self, skip, pretrain_file=PRETRAIN_FILE, conversion=CONVERSION, is_print=is_print)
-    def __init__(self):
-        super(get_net, self).__init__()
-        net = EfficientNet.from_pretrained('efficientnet-b4')
-        self.block1 = net.block1
-        self.block2 = net.block2
-        self.block3 = net.block3
-        self.block4 = net.block4
-        self.block5 = net.block5
-        del net
+def get_net():
+    net = EfficientNet.from_pretrained('efficientnet-b4')
     net._fc = nn.Linear(in_features = 1792, out_features = 4, bias = True)
-
+    return net
 
 net = get_net().cuda()
 
