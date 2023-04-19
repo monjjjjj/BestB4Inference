@@ -36,6 +36,18 @@ def seed_everything(seed):
     torch.backends.cudnn.benchmark = True
 seed_everything(SEED)
 
+class ZeroLinear(nn.Module):
+    def __init__(self,in_dim,out_dim):
+        super(ZeroLinear, self).__init__()
+        self.linear = nn.Linear(in_dim,out_dim-1)
+
+    def forward(self, x):
+        batch_size = len(x)
+        x = self.linear(x)
+        zero = torch.zeros((batch_size, 1), dtype=x.dtype).to(x.device)
+        x = torch.cat([zero, x], -1)
+        return x
+
 # EfficientNet
 class get_net(nn.Module):
     def load_pretrain(self, skip=['logit.', 'stem.', 'block6.', 'block7.', 'last.'], is_print=True):
@@ -49,7 +61,7 @@ class get_net(nn.Module):
         self.block4 = net.block4
         self.block5 = net.block5
         del net
-    net._fc = nn.Linear(in_features = 1792, out_features = 4, bias = True)
+        #net._fc = nn.Linear(in_features = 1792, out_features = 4, bias = True)
 
 net = get_net().cuda()
 
@@ -61,8 +73,7 @@ def get_test_transforms(mode):
     if mode == 0:
         return A.Compose([
                 A.Resize(height = 512, width = 512, p = 1.0),
-                ToTensorV2(p = 1.0),
-            =], p = 1.0)
+                ToTensorV2(p = 1.0)], p = 1.0)
     elif mode == 1:
         return A.Compose([
                 A.HorizontalFlip(p = 1),
