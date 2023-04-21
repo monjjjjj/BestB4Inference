@@ -7,6 +7,7 @@ from datetime import datetime
 from albumentations.pytorch.transforms import ToTensorV2
 from torch.utils.data import Dataset,DataLoader
 from torch.utils.data.sampler import SequentialSampler, RandomSampler
+from torchvision import transforms
 import cv2
 import torch
 import os
@@ -59,31 +60,27 @@ model.eval();
 def get_test_transforms(mode):
     if mode == 0:
         return A.Compose([
-                A.Resize(height = 512, width = 512, p = 1.0),
-                A.ToTensorV2(p = 1.0),
-                A.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
+                #A.Resize(height = 512, width = 512, p = 1.0),
+                ToTensorV2(p = 1.0),
                 ], p = 1.0)
     elif mode == 1:
         return A.Compose([
                 A.HorizontalFlip(p = 1),
-                A.Resize(height = 512, width = 512, p = 1.0),
-                A.ToTensorV2(p = 1.0),
-                A.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
+                #A.Resize(height = 512, width = 512, p = 1.0),
+                ToTensorV2(p = 1.0),
                 ], p = 1.0)
     elif mode == 2:
         return A.Compose([
                 A.VerticalFlip(p = 1),
-                A.Resize(height = 512, width = 512, p = 1.0),
-                A.ToTensorV2(p = 1.0),
-                A.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
+                #A.Resize(height = 512, width = 512, p = 1.0),
+                ToTensorV2(p = 1.0),
                 ], p = 1.0)
     else:
         return A.Compose([
                 A.HorizontalFlip(p = 1),
                 A.VerticalFlip(p = 1),
-                A.Resize(height = 512, width = 512, p = 1.0),
-                A.ToTensorV2(p = 1.0),
-                A.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
+                #A.Resize(height = 512, width = 512, p = 1.0),
+                ToTensorV2(p = 1.0),
                 ], p = 1.0)
 
 class DatasetSubmissionRetriever(Dataset):
@@ -117,7 +114,7 @@ for mode in range(0, 4):
 
     data_loader = DataLoader(
         dataset,
-        batch_size = 8,
+        batch_size = 20,
         shuffle = False,
         num_workers = 2,
         drop_last = False,
