@@ -1,22 +1,23 @@
 from efficientnet_pytorch import EfficientNet
 from glob import glob
 from sklearn.model_selection import GroupKFold
-import cv2
-from skimage import io
-import torch
 from torch import nn
-import os
+from skimage import io
 from datetime import datetime
+from albumentations.pytorch.transforms import ToTensorV2
+from torch.utils.data import Dataset,DataLoader
+from torch.utils.data.sampler import SequentialSampler, RandomSampler
+import cv2
+import torch
+import os
 import time
+import timm
 import random
 import cv2
 import pandas as pd
 import numpy as np
 import albumentations as A
 import matplotlib.pyplot as plt
-from albumentations.pytorch.transforms import ToTensorV2
-from torch.utils.data import Dataset,DataLoader
-from torch.utils.data.sampler import SequentialSampler, RandomSampler
 import sklearn
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -26,7 +27,10 @@ DATA_ROOT_PATH = '/home/chloe/Siting/ALASKA2'
 SEED = 42
 results = []
 submissions = []
+
+# check device
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+print(device)
 
 def seed_everything(seed):
     random.seed(seed)
@@ -40,42 +44,47 @@ seed_everything(SEED)
 
 # EfficientNet
 def build_model():
-    model = EfficientNet.from_pretrained('efficientnet-b4')
-    model._fc = nn.Linear(in_features = 1792, out_features = 4, bias = True)
-    model = model.to(device)
-    return model
+    net = timm.create_model('efficientnet_b0', pretrained=True)
+    #net = EfficientNet.from_pretrained('efficientnet-b4')
+    net._fc = nn.Linear(in_features=1792, out_features=4, bias=True)
+    print(net)
+    return net
 
-net = build_model()
+model = build_model().cuda()
 
-checkpoint = torch.load('checkpoints/best-checkpoint-042epoch_3_c.bin')
-net.load_state_dict(checkpoint['model_state_dict']);
-net.eval();
+#checkpoint = torch.load('checkpoints/best-checkpoint-042epoch_3_c.bin')
+#model.load_state_dict(checkpoint['model_state_dict']);
+model.eval();
 
 def get_test_transforms(mode):
     if mode == 0:
         return A.Compose([
                 A.Resize(height = 512, width = 512, p = 1.0),
-                ToTensorV2(p = 1.0),
-            ], p = 1.0)
+                A.ToTensorV2(p = 1.0),
+                A.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
+                ], p = 1.0)
     elif mode == 1:
         return A.Compose([
                 A.HorizontalFlip(p = 1),
                 A.Resize(height = 512, width = 512, p = 1.0),
-                ToTensorV2(p = 1.0),
-            ], p = 1.0)
+                A.ToTensorV2(p = 1.0),
+                A.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
+                ], p = 1.0)
     elif mode == 2:
         return A.Compose([
                 A.VerticalFlip(p = 1),
                 A.Resize(height = 512, width = 512, p = 1.0),
-                ToTensorV2(p = 1.0),
-            ], p = 1.0)
+                A.ToTensorV2(p = 1.0),
+                A.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
+                ], p = 1.0)
     else:
         return A.Compose([
                 A.HorizontalFlip(p = 1),
                 A.VerticalFlip(p = 1),
                 A.Resize(height = 512, width = 512, p = 1.0),
-                ToTensorV2(p = 1.0),
-            ], p = 1.0)
+                A.ToTensorV2(p = 1.0),
+                A.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
+                ], p = 1.0)
 
 class DatasetSubmissionRetriever(Dataset):
 
@@ -118,7 +127,7 @@ for mode in range(0, 4):
     for step, (image_names, images) in enumerate(data_loader):
         print(step, end='\r')
 
-        y_pred = net(images.cuda())
+        y_pred = model(images.cuda())
         y_pred = 1 - nn.functional.softmax(y_pred, dim = 1).data.cpu().numpy()[:, 0]
 
         result['Id'].extend(image_names)
@@ -126,7 +135,7 @@ for mode in range(0, 4):
 
     results.append(result)
 
-y_pred = net(images.cuda())
+y_pred = model(images.cuda())
 y_pred = 1 - nn.functional.softmax(y_pred, dim=1).data.cpu().numpy()[:, 0]
 
 result['Id'].extend(image_names)
